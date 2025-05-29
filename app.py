@@ -303,7 +303,7 @@ for message in st.session_state.messages:
         st.write(message["content"])
 
 # Chat input
-if prompt := st.chat_input("Ask a question about the paragraph..."):
+if prompt := st.chat_input("Ask a question about the Handbook..."):
     # Add user message to chat history
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):

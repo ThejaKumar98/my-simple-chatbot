@@ -245,7 +245,7 @@ Esperanza is committed to an overall culture of safety. EHC seeks to create a sa
 """
 
 # Set up the page
-st.set_page_config(page_title="Simple RAG Chatbot", page_icon="🤖")
+st.set_page_config(page_title="Kumarbot", page_icon="🤖")
 st.title("🤖 Kumarbot")
 st.write("Ask me questions about the Employee Handbook!")
 

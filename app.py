@@ -1,5 +1,5 @@
 import streamlit as st
-import openai
+from openai import OpenAI
 from sentence_transformers import SentenceTransformer
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
@@ -46,6 +46,9 @@ def prepare_data(paragraph):
 if 'openai_api_key' not in st.session_state:
     st.session_state.openai_api_key = ""
 
+if 'openai_client' not in st.session_state:
+    st.session_state.openai_client = None
+
 with st.sidebar:
     st.header("⚙️ Settings")
     api_key = st.text_input(
@@ -56,7 +59,7 @@ with st.sidebar:
     )
     if api_key:
         st.session_state.openai_api_key = api_key
-        openai.api_key = api_key
+        st.session_state.openai_client = OpenAI(api_key=api_key)
 
 # Prepare the data
 sentences, embeddings = prepare_data(YOUR_PARAGRAPH)
@@ -78,7 +81,7 @@ if prompt := st.chat_input("Ask a question about the paragraph..."):
         st.write(prompt)
     
     # Check if API key is provided
-    if not st.session_state.openai_api_key:
+    if not st.session_state.openai_client:
         with st.chat_message("assistant"):
             st.error("Please enter your OpenAI API key in the sidebar to use the chatbot.")
     else:
@@ -103,7 +106,7 @@ if prompt := st.chat_input("Ask a question about the paragraph..."):
         try:
             with st.chat_message("assistant"):
                 with st.spinner("Thinking..."):
-                    response = openai.ChatCompletion.create(
+                    response = st.session_state.openai_client.chat.completions.create(
                         model="gpt-3.5-turbo",
                         messages=[
                             {"role": "system", "content": f"You are a helpful assistant. Answer the user's question based on this context: {context}. If the context doesn't contain enough information to answer the question, say so politely."},

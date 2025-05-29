@@ -1,0 +1,24 @@
+# Simple RAG Chatbot
+
+A simple chatbot that can answer questions about a specific paragraph using RAG (Retrieval Augmented Generation).
+
+## How it works:
+1. Takes a paragraph of text
+2. Breaks it into sentences
+3. When you ask a question, it finds the most relevant sentences
+4. Uses OpenAI's GPT to generate an answer based on those sentences
+
+## To use:
+1. Get an OpenAI API key from https://platform.openai.com/api-keys
+2. Enter your API key in the sidebar
+3. Ask questions about the paragraph!
+
+## To customize:
+- Replace the `YOUR_PARAGRAPH` variable in `app.py` with your own text
+- The chatbot will then answer questions about your paragraph instead
+
+## Features:
+- Chat interface
+- Shows which sentences were used to answer your question
+- Works with any paragraph you provide
+- No local installation needed!

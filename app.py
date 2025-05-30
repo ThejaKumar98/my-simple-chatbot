@@ -65,7 +65,7 @@ Non-exempt hourly employees who have worked for 1-2 years get 80 hours of vacati
 
 Managers, Directors, and Providers receive 160 hours of vacation time per year when they work for 1-5 years, 180 hours of vacation time after working 6-7 years, and 200 hours after working for 8 or more years.
 
-Exempt Employees receive 120 hours of vacation time per year when they work for 1-5 years, 140 hours when they work for 6-7 years, 160 hours when they work for 8-15 years, and 176 hours after working for 16 or more years. 
+Exempt Employees, such as administrators and any other salaried employees that are not managers, directors, or providers receive 120 hours of vacation time per year when they work for 1-5 years, 140 hours when they work for 6-7 years, 160 hours when they work for 8-15 years, and 176 hours after working for 16 or more years. 
 
 Esperanza provides sick paid time off (leave) for employees to care for themselves and their family while they are sick. Employees who work at least 40 hours per year are eligible to accrue hours of sick paid time off proportional to the hours they are scheduled to work. Employees who work less than 24 hours a week and work at least 40 hours a year will accrue sick time proportionate to that of a full-time employee in the same position. New employees are not eligible to use sick paid time off until their probationary period is completed. Temporary or seasonal employees are eligible for prorated sick paid time off, per Philadelphia’s “Promoting Health Families and Workplaces” sick leave law.
 

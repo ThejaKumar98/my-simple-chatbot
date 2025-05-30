@@ -250,6 +250,14 @@ st.set_page_config(page_title="Kumarbot", page_icon="🤖")
 st.title("🤖 Kumarbot")
 st.write("Ask me questions about the Employee Handbook!")
 
+# Get OpenAI API key from Streamlit secrets
+try:
+    openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+    api_key_available = True
+except Exception as e:
+    openai_client = None
+    api_key_available = False
+
 # Initialize the embedding model (this runs once)
 @st.cache_resource
 def load_model():
@@ -268,15 +276,6 @@ def prepare_data(paragraph):
     
     return sentences, embeddings
 
-# Get OpenAI API key from user
-try:
-    openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-    api_key_available = True
-except Exception as e:
-    openai_client = None
-    api_key_available = False
-
-
 # Prepare the data
 sentences, embeddings = prepare_data(YOUR_PARAGRAPH)
 
@@ -290,14 +289,14 @@ for message in st.session_state.messages:
         st.write(message["content"])
 
 # Chat input
-if prompt := st.chat_input("Ask a question about the Handbook..."):
+if prompt := st.chat_input("Ask a question..."):
     # Add user message to chat history
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.write(prompt)
     
-    # Check if API key is provided
-    if not st.session_state.openai_client:
+    # Check if API key is available
+    if not api_key_available:
         with st.chat_message("assistant"):
             st.error("API key not configured. Please contact your administrator.")
     else:
@@ -322,7 +321,7 @@ if prompt := st.chat_input("Ask a question about the Handbook..."):
         try:
             with st.chat_message("assistant"):
                 with st.spinner("Thinking..."):
-                    response = st.session_state.openai_client.chat.completions.create(
+                    response = openai_client.chat.completions.create(
                         model="gpt-3.5-turbo",
                         messages=[
                             {"role": "system", "content": f"You are a helpful assistant. Answer the user's question based on this context: {context}. If the context doesn't contain enough information to answer the question, say so politely."},
@@ -346,11 +345,11 @@ if prompt := st.chat_input("Ask a question about the Handbook..."):
         except Exception as e:
             with st.chat_message("assistant"):
                 st.error(f"Error: {str(e)}")
-                st.write("Make sure your OpenAI API key is correct and you have credits available.")
+                st.write("Please contact your administrator if this problem persists.")
 
 # Instructions
 with st.sidebar:
-    st.header("📝 Instructions")
+    st.header("📝 How to Use")
     st.write("""
     Simply ask questions about the company information and get instant answers!
     """)

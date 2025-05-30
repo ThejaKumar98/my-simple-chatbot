@@ -269,23 +269,13 @@ def prepare_data(paragraph):
     return sentences, embeddings
 
 # Get OpenAI API key from user
-if 'openai_api_key' not in st.session_state:
-    st.session_state.openai_api_key = ""
+try:
+    openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+    api_key_available = True
+except Exception as e:
+    openai_client = None
+    api_key_available = False
 
-if 'openai_client' not in st.session_state:
-    st.session_state.openai_client = None
-
-with st.sidebar:
-    st.header("⚙️ Settings")
-    api_key = st.text_input(
-        "Enter your OpenAI API Key:", 
-        type="password", 
-        value=st.session_state.openai_api_key,
-        help="Get your API key from https://platform.openai.com/api-keys"
-    )
-    if api_key:
-        st.session_state.openai_api_key = api_key
-        st.session_state.openai_client = OpenAI(api_key=api_key)
 
 # Prepare the data
 sentences, embeddings = prepare_data(YOUR_PARAGRAPH)
@@ -309,7 +299,7 @@ if prompt := st.chat_input("Ask a question about the Handbook..."):
     # Check if API key is provided
     if not st.session_state.openai_client:
         with st.chat_message("assistant"):
-            st.error("Please enter your OpenAI API key in the sidebar to use the chatbot.")
+            st.error("API key not configured. Please contact your administrator.")
     else:
         # Find relevant sentences
         model = load_model()
@@ -362,15 +352,13 @@ if prompt := st.chat_input("Ask a question about the Handbook..."):
 with st.sidebar:
     st.header("📝 Instructions")
     st.write("""
-    1. Get an OpenAI API key from https://platform.openai.com/api-keys
-    2. Enter your API key in the box above
-    3. Ask questions about the paragraph
-    4. The chatbot will find relevant sentences and answer your questions!
+    Simply ask questions about the company information and get instant answers!
     """)
     
-    st.header("💡 Tips")
+    st.header("💡 Example Questions")
     st.write("""
-    - Ask specific questions about the content
-    - Try questions like "What is the Amazon rainforest?" or "Why is deforestation a problem?"
-    - The chatbot can only answer based on the paragraph provided
+    - "What is our vacation policy?"
+    - "How do I request time off?"
+    - "What are the company benefits?"
+    - "Who do I contact for HR questions?"
     """)

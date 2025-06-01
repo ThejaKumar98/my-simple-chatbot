@@ -405,7 +405,7 @@ with st.sidebar:
     💡 **New!** I now remember our conversation, so you can ask follow-up questions like:
     - "Tell me more about that"
     - "What about part-time employees?"
-    - "How does that apply to remote workers?"
+    - "How does that apply to my role?"
     """)
     
     st.header("💡 Example Questions")

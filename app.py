@@ -276,8 +276,42 @@ def prepare_data(paragraph):
     
     return sentences, embeddings
 
+# NEW: Conversation memory functions
+def initialize_conversation_memory():
+    """Initialize conversation memory if it doesn't exist"""
+    if 'conversation_memory' not in st.session_state:
+        st.session_state.conversation_memory = []
+
+def add_to_memory(user_message: str, bot_response: str):
+    """Add exchange to memory, keeping only last 5"""
+    exchange = {
+        'user': user_message,
+        'bot': bot_response
+    }
+    
+    st.session_state.conversation_memory.append(exchange)
+    
+    # Keep only last 5 exchanges
+    if len(st.session_state.conversation_memory) > 5:
+        st.session_state.conversation_memory = st.session_state.conversation_memory[-5:]
+
+def get_conversation_context() -> str:
+    """Get formatted conversation history for prompt"""
+    if not st.session_state.conversation_memory:
+        return ""
+    
+    context_parts = ["Previous conversation:"]
+    for i, exchange in enumerate(st.session_state.conversation_memory):
+        context_parts.append(f"Q{i+1}: {exchange['user']}")
+        context_parts.append(f"A{i+1}: {exchange['bot']}")
+    
+    return "\n".join(context_parts)
+
 # Prepare the data
 sentences, embeddings = prepare_data(YOUR_PARAGRAPH)
+
+# Initialize conversation memory
+initialize_conversation_memory()
 
 # Chat interface
 if 'messages' not in st.session_state:
@@ -316,15 +350,27 @@ if prompt := st.chat_input("Ask a question..."):
         
         # Create context
         context = " ".join(relevant_sentences)
+
+        # NEW: Get conversation context
+        conversation_context = get_conversation_context()
         
-        # Generate response using OpenAI
+       # Generate response using OpenAI
         try:
             with st.chat_message("assistant"):
                 with st.spinner("Thinking..."):
+                    # MODIFIED: Updated system message to include conversation context
+                    system_message = f"""You are a helpful HR assistant. Answer the user's question based on the employee handbook context provided.
+
+{conversation_context}
+
+Employee Handbook Context: {context}
+
+If the current question references something from our previous conversation (like "that policy", "what about...", "how does that work"), use the conversation history to understand what they're referring to. If the context doesn't contain enough information to answer the question, say so politely."""
+
                     response = openai_client.chat.completions.create(
                         model="gpt-3.5-turbo",
                         messages=[
-                            {"role": "system", "content": f"You are a helpful assistant. Answer the user's question based on this context: {context}. If the context doesn't contain enough information to answer the question, say so politely."},
+                            {"role": "system", "content": system_message},
                             {"role": "user", "content": prompt}
                         ],
                         max_tokens=150,
@@ -336,6 +382,9 @@ if prompt := st.chat_input("Ask a question..."):
                     
                     # Add assistant response to chat history
                     st.session_state.messages.append({"role": "assistant", "content": answer})
+                    
+                    # NEW: Add to conversation memory
+                    add_to_memory(prompt, answer)
                     
                     # Show which sentences were used (for debugging)
                     with st.expander("🔍 Source sentences used"):
@@ -352,6 +401,11 @@ with st.sidebar:
     st.header("📝 How to Use")
     st.write("""
     Simply ask questions about the company information and get instant answers!
+    
+    💡 **New!** I now remember our conversation, so you can ask follow-up questions like:
+    - "Tell me more about that"
+    - "What about part-time employees?"
+    - "How does that apply to remote workers?"
     """)
     
     st.header("💡 Example Questions")
@@ -361,3 +415,14 @@ with st.sidebar:
     - "What are the company benefits?"
     - "Who do I contact for HR questions?"
     """)
+    
+    # NEW: Memory management
+    st.header("🧠 Conversation Memory")
+    if st.session_state.conversation_memory:
+        st.write(f"Remembering last {len(st.session_state.conversation_memory)} exchanges")
+        if st.button("Clear Memory"):
+            st.session_state.conversation_memory = []
+            st.success("Memory cleared!")
+            st.rerun()
+    else:
+        st.write("No conversation history yet")

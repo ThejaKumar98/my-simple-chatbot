@@ -550,6 +550,8 @@ Esperanza is committed to an overall culture of safety. EHC seeks to create a sa
 
 """
 
+# Replace the input processing section in your main() function with this:
+
 def main():
     # Get components
     openai_client, api_key_available = get_openai_client()
@@ -578,24 +580,25 @@ def main():
             with st.chat_message(message["role"]):
                 st.write(message["content"])
 
-    # Check for pending question from example buttons BEFORE chat input
+    # Chat input (always show this)
+    user_input = st.chat_input("Ask a question about the Employee Handbook...")
+    
+    # Determine what to process
+    prompt = None
+    process_user_input = False
+    
+    # Check for pending question from example buttons FIRST
     if hasattr(st.session_state, 'pending_question') and st.session_state.pending_question:
         prompt = st.session_state.pending_question
         st.session_state.pending_question = None  # Clear the pending question
         process_user_input = True
-    else:
-        process_user_input = False
-        prompt = None
-    
-    # Chat input (MUST be outside columns and at this position to stay at bottom)
-    if not process_user_input:  # Only show input if not already processing
-        user_input = st.chat_input("Ask a question about the Employee Handbook...")
-        if user_input:
-            prompt = user_input
-            process_user_input = True
+    # Then check for regular chat input
+    elif user_input:
+        prompt = user_input
+        process_user_input = True
 
-        # Process user input (from chat input or example button)
-    if process_user_input:
+    # Process user input (from either source)
+    if process_user_input and prompt:
         # Add user message
         st.session_state.messages.append({"role": "user", "content": prompt})
         
@@ -680,7 +683,7 @@ def main():
         ]
         
         for example in examples:
-             if st.sidebar.button(example, key=f"ex_{hash(example)}"):
+            if st.sidebar.button(example, key=f"ex_{hash(example)}"):
                 # Set the example as a pending question to be processed
                 st.session_state.pending_question = example
                 st.rerun()

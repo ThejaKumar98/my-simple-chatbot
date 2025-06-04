@@ -9,10 +9,6 @@ from typing import List, Tuple, Dict, Any
 from dataclasses import dataclass
 import time
 from pathlib import Path
-import io
-import PyPDF2
-import docx
-import pandas as pd
 
 # Configuration
 @dataclass
@@ -26,7 +22,6 @@ class Config:
     MAX_MEMORY_SIZE: int = 8
     CHUNK_SIZE: int = 200  # words per chunk
     CHUNK_OVERLAP: int = 50  # words overlap
-    MAX_FILE_SIZE: int = 10  # MB
 
 config = Config()
 
@@ -59,199 +54,19 @@ st.markdown("""
         padding: 0.5rem;
         margin: 0.5rem 0;
     }
-    .uploaded-file {
-        background-color: #e6f3ff;
-        border-left: 4px solid #0066cc;
-        padding: 0.5rem;
-        margin: 0.5rem 0;
-        border-radius: 0.25rem;
-    }
 </style>
 """, unsafe_allow_html=True)
 
 st.title("🤖 Kumarbot")
-st.write("Ask me questions about uploaded documents or the Employee Handbook!")
-
-class DocumentExtractor:
-    """Extract text from various document types"""
-    
-    @staticmethod
-    def extract_from_pdf(file) -> str:
-        """Extract text from PDF file"""
-        try:
-            pdf_reader = PyPDF2.PdfReader(file)
-            text = ""
-            for page in pdf_reader.pages:
-                text += page.extract_text() + "\n"
-            return text
-        except Exception as e:
-            logger.error(f"Error extracting PDF: {e}")
-            raise Exception(f"Failed to extract text from PDF: {str(e)}")
-    
-    @staticmethod
-    def extract_from_docx(file) -> str:
-        """Extract text from DOCX file"""
-        try:
-            doc = docx.Document(file)
-            text = ""
-            for paragraph in doc.paragraphs:
-                text += paragraph.text + "\n"
-            return text
-        except Exception as e:
-            logger.error(f"Error extracting DOCX: {e}")
-            raise Exception(f"Failed to extract text from DOCX: {str(e)}")
-    
-    @staticmethod
-    def extract_from_txt(file) -> str:
-        """Extract text from TXT file"""
-        try:
-            return file.read().decode('utf-8')
-        except UnicodeDecodeError:
-            try:
-                file.seek(0)
-                return file.read().decode('latin-1')
-            except Exception as e:
-                logger.error(f"Error extracting TXT: {e}")
-                raise Exception(f"Failed to extract text from TXT: {str(e)}")
-    
-    @staticmethod
-    def extract_from_csv(file) -> str:
-        """Extract text from CSV file"""
-        try:
-            df = pd.read_csv(file)
-            # Convert dataframe to readable text
-            text = f"CSV Data Summary:\n"
-            text += f"Columns: {', '.join(df.columns.tolist())}\n"
-            text += f"Number of rows: {len(df)}\n\n"
-            text += "Sample data:\n"
-            text += df.head(10).to_string(index=False)
-            return text
-        except Exception as e:
-            logger.error(f"Error extracting CSV: {e}")
-            raise Exception(f"Failed to extract text from CSV: {str(e)}")
-
-class DocumentManager:
-    """Manage uploaded documents and their content"""
-    
-    def __init__(self):
-        self.extractor = DocumentExtractor()
-    
-    def initialize_session_state(self):
-        """Initialize document-related session state"""
-        if 'uploaded_documents' not in st.session_state:
-            st.session_state.uploaded_documents = {}
-        if 'combined_text' not in st.session_state:
-            st.session_state.combined_text = ""
-        if 'document_sources' not in st.session_state:
-            st.session_state.document_sources = {}
-    
-    def process_uploaded_file(self, uploaded_file) -> Tuple[str, bool]:
-        """Process a single uploaded file and extract text"""
-        try:
-            file_extension = uploaded_file.name.split('.')[-1].lower()
-            
-            # Check file size
-            if uploaded_file.size > config.MAX_FILE_SIZE * 1024 * 1024:
-                return f"File {uploaded_file.name} is too large (max {config.MAX_FILE_SIZE}MB)", False
-            
-            # Extract text based on file type
-            if file_extension == 'pdf':
-                text = self.extractor.extract_from_pdf(uploaded_file)
-            elif file_extension == 'docx':
-                text = self.extractor.extract_from_docx(uploaded_file)
-            elif file_extension == 'txt':
-                text = self.extractor.extract_from_txt(uploaded_file)
-            elif file_extension == 'csv':
-                text = self.extractor.extract_from_csv(uploaded_file)
-            else:
-                return f"Unsupported file type: {file_extension}", False
-            
-            if not text.strip():
-                return f"No text found in {uploaded_file.name}", False
-            
-            # Store document info
-            doc_info = {
-                'name': uploaded_file.name,
-                'type': file_extension,
-                'size': uploaded_file.size,
-                'text': text,
-                'upload_time': time.time()
-            }
-            
-            st.session_state.uploaded_documents[uploaded_file.name] = doc_info
-            
-            return f"Successfully processed {uploaded_file.name} ({len(text)} characters)", True
-            
-        except Exception as e:
-            logger.error(f"Error processing file {uploaded_file.name}: {e}")
-            return f"Error processing {uploaded_file.name}: {str(e)}", False
-    
-    def get_combined_text(self, include_handbook: bool = True) -> str:
-        """Get combined text from all sources"""
-        combined_parts = []
-        
-        # Add handbook content if available and requested
-        if include_handbook and YOUR_PARAGRAPH.strip() and "Your Employee Handbook content goes here" not in YOUR_PARAGRAPH:
-            combined_parts.append(f"=== EMPLOYEE HANDBOOK ===\n{YOUR_PARAGRAPH}\n")
-        
-        # Add uploaded documents
-        for doc_name, doc_info in st.session_state.uploaded_documents.items():
-            combined_parts.append(f"=== {doc_name} ===\n{doc_info['text']}\n")
-        
-        return "\n".join(combined_parts)
-    
-    def remove_document(self, doc_name: str):
-        """Remove a document from the collection"""
-        if doc_name in st.session_state.uploaded_documents:
-            del st.session_state.uploaded_documents[doc_name]
-            return True
-        return False
-    
-    def clear_all_documents(self):
-        """Clear all uploaded documents"""
-        st.session_state.uploaded_documents = {}
-        st.session_state.combined_text = ""
+st.write("Ask me questions about the Employee Handbook!")
 
 class DocumentProcessor:
     """Enhanced document processing with better chunking strategies"""
     
     @staticmethod
-    def smart_chunk_text(text: str, chunk_size: int = 200, overlap: int = 50) -> List[Dict[str, Any]]:
-        """Split text into overlapping chunks with source tracking"""
-        # First split by document sections
-        sections = text.split('=== ')
-        chunks = []
-        
-        for section in sections:
-            if not section.strip():
-                continue
-            
-            # Extract source name if available
-            lines = section.split('\n')
-            if len(lines) > 1 and ' ===' in lines[0]:
-                source_name = lines[0].replace(' ===', '').strip()
-                section_text = '\n'.join(lines[1:])
-            else:
-                source_name = "Unknown"
-                section_text = section
-            
-            # Split section into chunks
-            section_chunks = DocumentProcessor._chunk_text_basic(section_text, chunk_size, overlap)
-            
-            # Add source information to each chunk
-            for chunk_text in section_chunks:
-                chunks.append({
-                    'text': chunk_text,
-                    'source': source_name,
-                    'length': len(chunk_text)
-                })
-        
-        return chunks
-    
-    @staticmethod
-    def _chunk_text_basic(text: str, chunk_size: int, overlap: int) -> List[str]:
-        """Basic text chunking with sentence awareness"""
-        # Split by paragraphs first
+    def smart_chunk_text(text: str, chunk_size: int = 200, overlap: int = 50) -> List[str]:
+        """Split text into overlapping chunks based on sentences and paragraphs"""
+        # First split by paragraphs
         paragraphs = text.split('\n\n')
         chunks = []
         
@@ -278,7 +93,7 @@ class DocumentProcessor:
                     chunks.append(' '.join(current_chunk))
                     
                     # Start new chunk with overlap
-                    overlap_sentences = current_chunk[-max(1, overlap//20):] if overlap > 0 else []
+                    overlap_sentences = current_chunk[-overlap//20:] if overlap > 0 else []
                     current_chunk = overlap_sentences + [sentence]
                     current_word_count = sum(len(s.split()) for s in current_chunk)
                 else:
@@ -364,7 +179,7 @@ class ConversationManager:
         st.session_state.conversation_summary = ""
 
 class RAGSystem:
-    """Enhanced RAG system with document upload support"""
+    """Enhanced RAG system with better retrieval and error handling"""
     
     def __init__(self, model_name: str = config.MODEL_NAME):
         self.model_name = model_name
@@ -381,10 +196,11 @@ class RAGSystem:
             st.error("Failed to load embedding model. Please try refreshing the page.")
             return None
     
-    def prepare_data(self, text: str) -> Tuple[List[Dict], np.ndarray]:
-        """Process text and create embeddings with source tracking"""
+    @st.cache_data
+    def prepare_data(_self, text: str) -> Tuple[List[str], np.ndarray]:
+        """Process text and create embeddings with better error handling"""
         try:
-            # Use enhanced chunking with source tracking
+            # Use enhanced chunking
             processor = DocumentProcessor()
             chunks = processor.smart_chunk_text(text, config.CHUNK_SIZE, config.CHUNK_OVERLAP)
             
@@ -393,16 +209,13 @@ class RAGSystem:
                 return [], np.array([])
             
             # Load model
-            if self.model is None:
-                self.model = self.load_model()
-            
-            if self.model is None:
+            model = _self.load_model()
+            if model is None:
                 return [], np.array([])
             
             # Create embeddings with progress bar
-            chunk_texts = [chunk['text'] for chunk in chunks]
             with st.spinner(f"Processing {len(chunks)} text chunks..."):
-                embeddings = self.model.encode(chunk_texts, show_progress_bar=False)
+                embeddings = model.encode(chunks, show_progress_bar=False)
             
             logger.info(f"Successfully processed {len(chunks)} chunks")
             return chunks, embeddings
@@ -412,8 +225,8 @@ class RAGSystem:
             st.error(f"Error processing document: {str(e)}")
             return [], np.array([])
     
-    def retrieve_relevant_chunks(self, query: str, top_k: int = config.TOP_K_SENTENCES) -> List[Tuple[Dict, float]]:
-        """Retrieve relevant chunks with similarity scores and source info"""
+    def retrieve_relevant_chunks(self, query: str, top_k: int = config.TOP_K_SENTENCES) -> List[Tuple[str, float]]:
+        """Retrieve relevant chunks with similarity scores"""
         try:
             if self.model is None:
                 self.model = self.load_model()
@@ -459,27 +272,23 @@ def get_openai_client():
 def initialize_rag_system():
     return RAGSystem()
 
-def generate_response(client: OpenAI, query: str, context: str, conversation_context: str, sources: List[str]) -> str:
-    """Generate response with source awareness"""
+def generate_response(client: OpenAI, query: str, context: str, conversation_context: str) -> str:
+    """Generate response with better prompt engineering"""
     try:
-        source_info = f"Available sources: {', '.join(set(sources))}" if sources else "Source: Employee Handbook"
-        
-        system_message = f"""You are Kumarbot, a helpful HR assistant. You answer questions based on uploaded documents and the Employee Handbook.
+        system_message = f"""You are Kumarbot, a helpful HR assistant for our company. Your role is to answer employee questions based on our Employee Handbook.
 
 {conversation_context}
 
-{source_info}
-
-CURRENT CONTEXT:
+CURRENT CONTEXT FROM HANDBOOK:
 {context}
 
 INSTRUCTIONS:
-- Answer based on the provided context
-- Mention the source document when relevant
-- If the question references previous conversation, use conversation history
+- Answer based primarily on the handbook context provided
+- If the question references previous conversation ("that policy", "what about...", etc.), use conversation history
 - Be helpful, professional, and concise
 - If information is not in the context, say so politely and suggest contacting HR
-- Always maintain a friendly, supportive tone"""
+- Always maintain a friendly, supportive tone
+- Provide actionable information when possible"""
 
         response = client.chat.completions.create(
             model=config.OPENAI_MODEL,
@@ -497,6 +306,13 @@ INSTRUCTIONS:
         logger.error(f"Error generating response: {e}")
         raise e
 
+def main():
+    # Get components
+    openai_client, api_key_available = get_openai_client()
+    rag_system = initialize_rag_system()
+    conv_manager = ConversationManager(config.MAX_MEMORY_SIZE)
+    conv_manager.initialize()
+    
 # Load your handbook content - REPLACE THIS WITH YOUR ACTUAL HANDBOOK TEXT
 YOUR_PARAGRAPH = """Esperanza conducts pre-employment background checks on all applicants who accept an offer of employment. All offers of employment or volunteering at Esperanza are contingent upon clear results of a thorough background check. Background checks will be conducted for or requested of individuals in the following circumstances:  Job candidates to whom offers of employment have been made  Employees who are being promoted into new positions, as deemed necessary by the individual requirements of the position  Current employees whose current criminal background checks have aged will be checked every three years. Employees will be notified by HR of their expiring clearances and given instructions and a deadline for completing them.  Child abuse and Criminal: Mental Health professionals, Clinicians, nurses, social workers, medical assistants, dietitians, and any other employee whose job involves regular and repeated contact with children.  Criminal only: All other employees  For job applicants, background checks will not be requested or conducted during the employment application process, but only after a conditional offer of employment has been made in compliance with Pennsylvania law.
 
@@ -733,78 +549,28 @@ Under the provisions of the Pennsylvania Unemployment Compensation Law, employee
 Esperanza is committed to an overall culture of safety. EHC seeks to create a safe and peaceful environment for all patients, visitors and staff. Definition of Weapon: A weapon is an object, instrument, substance, or device which is intended to be used in a way that is likely to injure, kill, incapacitate, damage or destroy. Weapons include, but are not limited to firearms/guns, sling shots, stun guns/tasers, martial arts weapons, blades/knives greater than 3”, explosive devices, fireworks and other dangerous implements. Policy At Esperanza Health Center the safety and well-being of our patients, staff, and visitors are of paramount importance. In order to provide a secure environment conducive to healing and care, we have implemented a strict weapon-free policy within our premises. This policy applies to all individuals entering our facility, including patients, visitors, employees, vendors and contractors. Exemptions: Law enforcement officers and authorized security personnel, while on official duty and in uniform, are exempt from this policy Notice: Clear signage indicating the weapon-free policy will be prominently displayed at all entrances. The weapons policy will be reviewed with all employees at onboarding. Patients will sign a culture of safety acknowledgement upon registration and yearly, thereafter, as part of their patient update packet. Consequences: Employees in violation of this policy may be subject to sanctions as per Esperanza’s disciplinary policy up to and including, termination of employment. Patients in violation of this policy may be dismissed from the practice. See: procedural and reporting considerations Legal Considerations: Esperanza Health Center acknowledges that individuals with valid licenses to carry concealed firearms may have certain rights under Pennsylvania law. However, the health center reserves the right to maintain a weapon-free environment for the safety and comfort of all individuals on its premises. Procedural and Reporting Considerations  Security guards are trained to observe persons entering EHC facilities for possession of a weapon. If a weapon is observed, or if there is probable cause to believe that the person may be carrying a weapon, security will pull the person to the side and inquire. If a weapon is discovered, the person will be directed to secure the weapon outside of the facility, prior to services being rendered. Communication with the person will be done discreetly, and with the intent to communicate Esperanza’s commitment to the safety and wellbeing of patients, staff, and visitors.  If a person is observed to have a weapon while in the course of being seen as a patient, or as a participant in an EHC activity, employees are asked to use judgment in how they proceed. If the employee has a relationship with the patient/client (or feels comfortable broaching the subject), they should remind the patient/client of the EHC policy prohibiting weapons on premise. If the employee does not feel secure in having this conversation, a supervisor, clinician, security or administrator should be sought to address the situation. Providers, Supervisors/Managers, and Administrators, by nature of their job responsibility, should be ready to address situations of this nature.  Once a patient/client is informed of the policy, the Office Manager or Director of Programs should be informed so that a letter is sent to the patient/client reminding them of the policy and that a subsequent infraction will lead to dismissal from Esperanza. An incident report must be written describing the weapon seen and the discussion with the patient/client, as well as indicating that the letter was sent.  Note: If in the discussion with the patient/client it is perceived that the patient/client is ambivalent toward or dismissive of the culture of safety philosophy of Esperanza and that adherence is not forthcoming, Esperanza may forego the warning letter and move to direct dismissal. Any individual who observes another person in possession of a weapon on our premises is strongly encouraged to report the incident to security personnel. This weapon-free policy will be strictly enforced by Esperanza Health Center’s security personnel and management. The cooperation of all individuals entering our facility is vital in ensuring a safe and healing environment for everyone. By adhering to this policy, we contribute to the security and well-being of our community.
 """
 
+# Replace the input processing section in your main() function with this:
+
 def main():
     # Get components
     openai_client, api_key_available = get_openai_client()
     rag_system = initialize_rag_system()
     conv_manager = ConversationManager(config.MAX_MEMORY_SIZE)
-    doc_manager = DocumentManager()
-    
-    # Initialize session states
     conv_manager.initialize()
-    doc_manager.initialize_session_state()
+    
+    # Prepare data
+    if YOUR_PARAGRAPH.strip() and "Your Employee Handbook content goes here" not in YOUR_PARAGRAPH:
+        rag_system.chunks, rag_system.embeddings = rag_system.prepare_data(YOUR_PARAGRAPH)
+        data_ready = len(rag_system.chunks) > 0
+    else:
+        st.warning("⚠️ Please replace YOUR_PARAGRAPH with your actual Employee Handbook content.")
+        data_ready = False
     
     # Initialize chat history
     if 'messages' not in st.session_state:
         st.session_state.messages = []
     
-    # Document Upload Section
-    st.header("📁 Document Upload")
-    uploaded_files = st.file_uploader(
-        "Upload documents to chat about",
-        type=['pdf', 'docx', 'txt', 'csv'],
-        accept_multiple_files=True,
-        help=f"Supported formats: PDF, DOCX, TXT, CSV (max {config.MAX_FILE_SIZE}MB each)"
-    )
-    
-    # Process uploaded files
-    if uploaded_files:
-        with st.spinner("Processing uploaded files..."):
-            for uploaded_file in uploaded_files:
-                if uploaded_file.name not in st.session_state.uploaded_documents:
-                    message, success = doc_manager.process_uploaded_file(uploaded_file)
-                    if success:
-                        st.success(message)
-                    else:
-                        st.error(message)
-    
-    # Show uploaded documents
-    if st.session_state.uploaded_documents:
-        st.subheader("📄 Uploaded Documents")
-        for doc_name, doc_info in st.session_state.uploaded_documents.items():
-            col1, col2, col3 = st.columns([3, 1, 1])
-            with col1:
-                st.markdown(f"""
-                <div class="uploaded-file">
-                    <strong>{doc_name}</strong><br>
-                    Type: {doc_info['type'].upper()} | Size: {doc_info['size']:,} bytes | 
-                    Characters: {len(doc_info['text']):,}
-                </div>
-                """, unsafe_allow_html=True)
-            with col2:
-                if st.button("Remove", key=f"remove_{doc_name}"):
-                    doc_manager.remove_document(doc_name)
-                    st.rerun()
-            with col3:
-                if st.button("Preview", key=f"preview_{doc_name}"):
-                    st.text_area(
-                        f"Preview of {doc_name}",
-                        doc_info['text'][:500] + "..." if len(doc_info['text']) > 500 else doc_info['text'],
-                        height=100,
-                        key=f"preview_text_{doc_name}"
-                    )
-    
-    # Prepare data for RAG
-    combined_text = doc_manager.get_combined_text()
-    if combined_text.strip():
-        rag_system.chunks, rag_system.embeddings = rag_system.prepare_data(combined_text)
-        data_ready = len(rag_system.chunks) > 0
-    else:
-        st.info("Upload documents or add handbook content to start chatting!")
-        data_ready = False
-    
     # Main chat interface
-    st.header("💬 Chat")
     col1, col2 = st.columns([3, 1])
     
     with col1:    
@@ -814,7 +580,7 @@ def main():
                 st.write(message["content"])
 
     # Chat input (always show this)
-    user_input = st.chat_input("Ask a question about the uploaded documents...")
+    user_input = st.chat_input("Ask a question about the Employee Handbook...")
     
     # Determine what to process
     prompt = None
@@ -823,14 +589,14 @@ def main():
     # Check for pending question from example buttons FIRST
     if hasattr(st.session_state, 'pending_question') and st.session_state.pending_question:
         prompt = st.session_state.pending_question
-        st.session_state.pending_question = None
+        st.session_state.pending_question = None  # Clear the pending question
         process_user_input = True
     # Then check for regular chat input
     elif user_input:
         prompt = user_input
         process_user_input = True
 
-    # Process user input
+    # Process user input (from either source)
     if process_user_input and prompt:
         # Add user message
         st.session_state.messages.append({"role": "user", "content": prompt})
@@ -840,7 +606,7 @@ def main():
             error_msg = "🔑 API key not configured. Please contact your administrator."
             st.session_state.messages.append({"role": "assistant", "content": error_msg})
         elif not data_ready:
-            error_msg = "📄 No documents loaded. Please upload documents or add handbook content."
+            error_msg = "📄 Handbook content not loaded. Please contact your administrator."
             st.session_state.messages.append({"role": "assistant", "content": error_msg})
         else:
             try:
@@ -848,34 +614,29 @@ def main():
                 relevant_chunks = rag_system.retrieve_relevant_chunks(prompt)
                 
                 if not relevant_chunks:
-                    answer = "I couldn't find specific information about that in the available documents. Please contact HR for assistance."
-                    sources = []
+                    answer = "I couldn't find specific information about that in our Employee Handbook. Please contact HR for assistance."
                 else:
-                    # Prepare context and sources
-                    context_parts = []
-                    sources = []
-                    for chunk_info, score in relevant_chunks:
-                        context_parts.append(chunk_info['text'])
-                        sources.append(chunk_info['source'])
-                    
-                    context = "\n\n".join(context_parts)
+                    # Prepare context
+                    context = "\n\n".join([chunk for chunk, _ in relevant_chunks])
                     conversation_context = conv_manager.get_context()
                     
                     # Generate response
-                    answer = generate_response(openai_client, prompt, context, conversation_context, sources)
+                    answer = generate_response(openai_client, prompt, context, conversation_context)
                 
                 # Add to chat history and memory
                 st.session_state.messages.append({"role": "assistant", "content": answer})
                 
                 metadata = {
                     'num_chunks_used': len(relevant_chunks) if relevant_chunks else 0,
-                    'similarity_scores': [score for _, score in relevant_chunks] if relevant_chunks else [],
-                    'sources': sources if relevant_chunks else []
+                    'similarity_scores': [score for _, score in relevant_chunks] if relevant_chunks else []
                 }
                 conv_manager.add_exchange(prompt, answer, metadata)
                 
                 # Store sources for display
-                st.session_state.last_sources = relevant_chunks if relevant_chunks else []
+                if relevant_chunks:
+                    st.session_state.last_sources = relevant_chunks
+                else:
+                    st.session_state.last_sources = []
             
             except Exception as e:
                 error_msg = f"❌ Error: {str(e)}"
@@ -885,14 +646,14 @@ def main():
         # Rerun to update the display
         st.rerun()
     
-    # Show sources for the last response
+    # Show sources for the last response (if any)
     if hasattr(st.session_state, 'last_sources') and st.session_state.last_sources:
-        with st.expander("🔍 Sources"):
-            for i, (chunk_info, score) in enumerate(st.session_state.last_sources, 1):
+        with st.expander("🔍 Sources from Employee Handbook"):
+            for i, (chunk, score) in enumerate(st.session_state.last_sources, 1):
                 st.markdown(f"""
                 <div class="source-highlight">
-                    <strong>Source {i}: {chunk_info['source']}</strong> (Relevance: {score:.2f})<br>
-                    {chunk_info['text'][:200]}{'...' if len(chunk_info['text']) > 200 else ''}
+                    <strong>Source {i}</strong> (Relevance: {score:.2f})<br>
+                    {chunk[:200]}{'...' if len(chunk) > 200 else ''}
                 </div>
                 """, unsafe_allow_html=True)
     
@@ -902,41 +663,29 @@ def main():
         
         st.sidebar.markdown("""
         ### 💡 How to Use
-        1. Upload documents (PDF, DOCX, TXT, CSV)
-        2. Ask questions about the content
-        3. Get answers with source references
+        Ask questions about company policies, benefits, procedures, or any topic covered in our Employee Handbook.
         
         ### 🔄 Follow-up Questions
         I remember our conversation, so you can ask:
         - "Tell me more about that"
-        - "What about the uploaded policy?"
+        - "What about contractors?"
         - "How does that work?"
         """)
         
         st.sidebar.header("📝 Example Questions")
         examples = [
-            "What documents have been uploaded?",
-            "Summarize the key points",
-            "What policies are mentioned?",
-            "Tell me about benefits",
-            "What are the main requirements?"
+            "What is our vacation policy?",
+            "How do I request time off?",
+            "What benefits do we offer?",
+            "What's the dress code?",
+            "Who handles payroll questions?"
         ]
         
         for example in examples:
             if st.sidebar.button(example, key=f"ex_{hash(example)}"):
+                # Set the example as a pending question to be processed
                 st.session_state.pending_question = example
                 st.rerun()
-        
-        # Document management
-        st.sidebar.header("📁 Document Management")
-        if st.session_state.uploaded_documents:
-            st.sidebar.success(f"📄 {len(st.session_state.uploaded_documents)} documents loaded")
-            if st.sidebar.button("🗑️ Clear All Documents"):
-                doc_manager.clear_all_documents()
-                st.sidebar.success("Documents cleared!")
-                st.rerun()
-        else:
-            st.sidebar.info("No documents uploaded yet")
         
         # Memory management
         st.sidebar.header("🧠 Conversation")
@@ -948,6 +697,7 @@ def main():
         if st.sidebar.button("🗑️ Clear Chat & Memory"):
             st.session_state.messages = []
             conv_manager.clear_memory()
+            # Also clear the sources
             if hasattr(st.session_state, 'last_sources'):
                 del st.session_state.last_sources
             st.sidebar.success("Cleared!")

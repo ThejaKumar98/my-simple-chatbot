@@ -667,8 +667,9 @@ def main():
         ]
         
         for example in examples:
-            if st.sidebar.button(example, key=f"ex_{hash(example)}"):
-                st.session_state.messages.append({"role": "user", "content": example})
+             if st.sidebar.button(example, key=f"ex_{hash(example)}"):
+                # Set the example as a pending question to be processed
+                st.session_state.pending_question = example
                 st.rerun()
         
         # Memory management
@@ -681,6 +682,9 @@ def main():
         if st.sidebar.button("🗑️ Clear Chat & Memory"):
             st.session_state.messages = []
             conv_manager.clear_memory()
+            # Also clear the sources
+            if hasattr(st.session_state, 'last_sources'):
+                del st.session_state.last_sources
             st.sidebar.success("Cleared!")
             st.rerun()
         

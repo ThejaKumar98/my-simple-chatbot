@@ -573,71 +573,74 @@ def main():
     col1, col2 = st.columns([3, 1])
     
     with col1:
-        # Display chat history
+        # Create a container for chat messages with fixed height
         chat_container = st.container()
-        with chat_container:
-            for message in st.session_state.messages:
-                with st.chat_message(message["role"]):
-                    st.write(message["content"])
         
-        # Chat input
-        if prompt := st.chat_input("Ask a question about the Employee Handbook..."):
-            # Add user message
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            with st.chat_message("user"):
-                st.write(prompt)
-            
-            # Generate response
-            if not api_key_available:
-                with st.chat_message("assistant"):
-                    st.error("🔑 API key not configured. Please contact your administrator.")
-            elif not data_ready:
-                with st.chat_message("assistant"):
-                    st.error("📄 Handbook content not loaded. Please contact your administrator.")
-            else:
-                try:
-                    with st.chat_message("assistant"):
-                        with st.spinner("🤔 Searching handbook..."):
-                            # Retrieve relevant chunks
-                            relevant_chunks = rag_system.retrieve_relevant_chunks(prompt)
-                            
-                            if not relevant_chunks:
-                                st.warning("No relevant information found in the handbook.")
-                                answer = "I couldn't find specific information about that in our Employee Handbook. Please contact HR for assistance."
-                            else:
-                                # Prepare context
-                                context = "\n\n".join([chunk for chunk, _ in relevant_chunks])
-                                conversation_context = conv_manager.get_context()
-                                
-                                # Generate response
-                                answer = generate_response(openai_client, prompt, context, conversation_context)
-                        
-                        st.write(answer)
-                        
-                        # Add to chat history and memory
-                        st.session_state.messages.append({"role": "assistant", "content": answer})
-                        
-                        metadata = {
-                            'num_chunks_used': len(relevant_chunks),
-                            'similarity_scores': [score for _, score in relevant_chunks]
-                        }
-                        conv_manager.add_exchange(prompt, answer, metadata)
-                        
-                        # Show sources
-                        if relevant_chunks:
-                            with st.expander("🔍 Sources from Employee Handbook"):
-                                for i, (chunk, score) in enumerate(relevant_chunks, 1):
-                                    st.markdown(f"""
-                                    <div class="source-highlight">
-                                        <strong>Source {i}</strong> (Relevance: {score:.2f})<br>
-                                        {chunk[:200]}{'...' if len(chunk) > 200 else ''}
-                                    </div>
-                                    """, unsafe_allow_html=True)
+        # Display chat history
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"]):
+                st.write(message["content"])
+    
+    # Chat input (outside the column structure to stay at bottom)
+    if prompt := st.chat_input("Ask a question about the Employee Handbook..."):
+        # Add user message
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        
+        # Generate response
+        if not api_key_available:
+            error_msg = "🔑 API key not configured. Please contact your administrator."
+            st.session_state.messages.append({"role": "assistant", "content": error_msg})
+        elif not data_ready:
+            error_msg = "📄 Handbook content not loaded. Please contact your administrator."
+            st.session_state.messages.append({"role": "assistant", "content": error_msg})
+        else:
+            try:
+                # Retrieve relevant chunks
+                relevant_chunks = rag_system.retrieve_relevant_chunks(prompt)
                 
-                except Exception as e:
-                    with st.chat_message("assistant"):
-                        st.error(f"❌ Error: {str(e)}")
-                        st.write("Please contact your administrator if this problem persists.")
+                if not relevant_chunks:
+                    answer = "I couldn't find specific information about that in our Employee Handbook. Please contact HR for assistance."
+                else:
+                    # Prepare context
+                    context = "\n\n".join([chunk for chunk, _ in relevant_chunks])
+                    conversation_context = conv_manager.get_context()
+                    
+                    # Generate response
+                    answer = generate_response(openai_client, prompt, context, conversation_context)
+                
+                # Add to chat history and memory
+                st.session_state.messages.append({"role": "assistant", "content": answer})
+                
+                metadata = {
+                    'num_chunks_used': len(relevant_chunks) if relevant_chunks else 0,
+                    'similarity_scores': [score for _, score in relevant_chunks] if relevant_chunks else []
+                }
+                conv_manager.add_exchange(prompt, answer, metadata)
+                
+                # Store sources for display
+                if relevant_chunks:
+                    st.session_state.last_sources = relevant_chunks
+                else:
+                    st.session_state.last_sources = []
+            
+            except Exception as e:
+                error_msg = f"❌ Error: {str(e)}"
+                st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                logger.error(f"Chat error: {e}")
+        
+        # Rerun to update the display
+        st.rerun()
+    
+    # Show sources for the last response (if any)
+    if hasattr(st.session_state, 'last_sources') and st.session_state.last_sources:
+        with st.expander("🔍 Sources from Employee Handbook"):
+            for i, (chunk, score) in enumerate(st.session_state.last_sources, 1):
+                st.markdown(f"""
+                <div class="source-highlight">
+                    <strong>Source {i}</strong> (Relevance: {score:.2f})<br>
+                    {chunk[:200]}{'...' if len(chunk) > 200 else ''}
+                </div>
+                """, unsafe_allow_html=True)
     
     # Sidebar
     with col2:

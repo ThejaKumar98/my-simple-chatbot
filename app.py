@@ -1,4 +1,3 @@
-
 import streamlit as st
 from openai import OpenAI
 from sentence_transformers import SentenceTransformer

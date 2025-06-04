@@ -4,10 +4,317 @@ from sentence_transformers import SentenceTransformer
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 import re
+import logging
+from typing import List, Tuple, Dict, Any
+from dataclasses import dataclass
+import time
+from pathlib import Path
 
-# Your paragraph goes here - REPLACE THIS WITH YOUR OWN PARAGRAPH
-YOUR_PARAGRAPH = """
-Esperanza conducts pre-employment background checks on all applicants who accept an offer of employment. All offers of employment or volunteering at Esperanza are contingent upon clear results of a thorough background check. Background checks will be conducted for or requested of individuals in the following circumstances:  Job candidates to whom offers of employment have been made  Employees who are being promoted into new positions, as deemed necessary by the individual requirements of the position  Current employees whose current criminal background checks have aged will be checked every three years. Employees will be notified by HR of their expiring clearances and given instructions and a deadline for completing them.  Child abuse and Criminal: Mental Health professionals, Clinicians, nurses, social workers, medical assistants, dietitians, and any other employee whose job involves regular and repeated contact with children.  Criminal only: All other employees  For job applicants, background checks will not be requested or conducted during the employment application process, but only after a conditional offer of employment has been made in compliance with Pennsylvania law.
+# Configuration
+@dataclass
+class Config:
+    MODEL_NAME: str = 'all-MiniLM-L6-v2'
+    OPENAI_MODEL: str = "gpt-3.5-turbo"
+    MAX_TOKENS: int = 300
+    TEMPERATURE: float = 0.7
+    SIMILARITY_THRESHOLD: float = 0.2
+    TOP_K_SENTENCES: int = 3
+    MAX_MEMORY_SIZE: int = 8
+    CHUNK_SIZE: int = 200  # words per chunk
+    CHUNK_OVERLAP: int = 50  # words overlap
+
+config = Config()
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Set up the page
+st.set_page_config(
+    page_title="Kumarbot", 
+    page_icon="🤖",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Custom CSS for better UI
+st.markdown("""
+<style>
+    .stChat {
+        height: 500px;
+    }
+    .chat-message {
+        padding: 1rem;
+        border-radius: 0.5rem;
+        margin-bottom: 1rem;
+    }
+    .source-highlight {
+        background-color: #f0f2f6;
+        border-left: 4px solid #ff6b6b;
+        padding: 0.5rem;
+        margin: 0.5rem 0;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+st.title("🤖 Kumarbot")
+st.write("Ask me questions about the Employee Handbook!")
+
+class DocumentProcessor:
+    """Enhanced document processing with better chunking strategies"""
+    
+    @staticmethod
+    def smart_chunk_text(text: str, chunk_size: int = 200, overlap: int = 50) -> List[str]:
+        """Split text into overlapping chunks based on sentences and paragraphs"""
+        # First split by paragraphs
+        paragraphs = text.split('\n\n')
+        chunks = []
+        
+        for paragraph in paragraphs:
+            if not paragraph.strip():
+                continue
+                
+            # Split paragraph into sentences
+            sentences = re.split(r'[.!?]+', paragraph)
+            sentences = [s.strip() for s in sentences if s.strip()]
+            
+            if not sentences:
+                continue
+            
+            # Group sentences into chunks
+            current_chunk = []
+            current_word_count = 0
+            
+            for sentence in sentences:
+                word_count = len(sentence.split())
+                
+                if current_word_count + word_count > chunk_size and current_chunk:
+                    # Save current chunk
+                    chunks.append(' '.join(current_chunk))
+                    
+                    # Start new chunk with overlap
+                    overlap_sentences = current_chunk[-overlap//20:] if overlap > 0 else []
+                    current_chunk = overlap_sentences + [sentence]
+                    current_word_count = sum(len(s.split()) for s in current_chunk)
+                else:
+                    current_chunk.append(sentence)
+                    current_word_count += word_count
+            
+            # Add remaining chunk
+            if current_chunk:
+                chunks.append(' '.join(current_chunk))
+        
+        return [chunk for chunk in chunks if len(chunk.strip()) > 10]
+
+class ConversationManager:
+    """Enhanced conversation memory management"""
+    
+    def __init__(self, max_size: int = 8):
+        self.max_size = max_size
+        
+    def initialize(self):
+        if 'conversation_memory' not in st.session_state:
+            st.session_state.conversation_memory = []
+        if 'conversation_summary' not in st.session_state:
+            st.session_state.conversation_summary = ""
+    
+    def add_exchange(self, user_message: str, bot_response: str, metadata: Dict[str, Any] = None):
+        exchange = {
+            'user': user_message,
+            'bot': bot_response,
+            'timestamp': time.time(),
+            'metadata': metadata or {}
+        }
+        
+        st.session_state.conversation_memory.append(exchange)
+        
+        # Maintain size limit
+        if len(st.session_state.conversation_memory) > self.max_size:
+            # Remove oldest exchanges but keep a summary
+            old_exchanges = st.session_state.conversation_memory[:-self.max_size]
+            st.session_state.conversation_memory = st.session_state.conversation_memory[-self.max_size:]
+            
+            # Update summary with removed exchanges
+            self._update_summary(old_exchanges)
+    
+    def _update_summary(self, old_exchanges: List[Dict]):
+        """Create a summary of old conversations"""
+        if not old_exchanges:
+            return
+            
+        topics = []
+        for exchange in old_exchanges:
+            # Simple topic extraction - could be enhanced with NLP
+            user_msg = exchange['user'].lower()
+            if any(word in user_msg for word in ['vacation', 'time off', 'leave']):
+                topics.append('vacation policies')
+            elif any(word in user_msg for word in ['benefit', 'insurance', 'health']):
+                topics.append('benefits')
+            elif any(word in user_msg for word in ['policy', 'rule', 'procedure']):
+                topics.append('company policies')
+        
+        if topics:
+            unique_topics = list(set(topics))
+            summary = f"Previously discussed: {', '.join(unique_topics)}"
+            st.session_state.conversation_summary = summary
+    
+    def get_context(self) -> str:
+        context_parts = []
+        
+        # Add summary if exists
+        if st.session_state.conversation_summary:
+            context_parts.append(f"Context from earlier: {st.session_state.conversation_summary}")
+        
+        # Add recent conversation
+        if st.session_state.conversation_memory:
+            context_parts.append("Recent conversation:")
+            for i, exchange in enumerate(st.session_state.conversation_memory[-3:], 1):
+                context_parts.append(f"Q{i}: {exchange['user']}")
+                context_parts.append(f"A{i}: {exchange['bot']}")
+        
+        return "\n".join(context_parts)
+    
+    def clear_memory(self):
+        st.session_state.conversation_memory = []
+        st.session_state.conversation_summary = ""
+
+class RAGSystem:
+    """Enhanced RAG system with better retrieval and error handling"""
+    
+    def __init__(self, model_name: str = config.MODEL_NAME):
+        self.model_name = model_name
+        self.model = None
+        self.chunks = []
+        self.embeddings = None
+        
+    @st.cache_resource
+    def load_model(_self):
+        try:
+            return SentenceTransformer(_self.model_name)
+        except Exception as e:
+            logger.error(f"Failed to load model: {e}")
+            st.error("Failed to load embedding model. Please try refreshing the page.")
+            return None
+    
+    @st.cache_data
+    def prepare_data(_self, text: str) -> Tuple[List[str], np.ndarray]:
+        """Process text and create embeddings with better error handling"""
+        try:
+            # Use enhanced chunking
+            processor = DocumentProcessor()
+            chunks = processor.smart_chunk_text(text, config.CHUNK_SIZE, config.CHUNK_OVERLAP)
+            
+            if not chunks:
+                st.error("No valid text chunks found. Please check your document content.")
+                return [], np.array([])
+            
+            # Load model
+            model = _self.load_model()
+            if model is None:
+                return [], np.array([])
+            
+            # Create embeddings with progress bar
+            with st.spinner(f"Processing {len(chunks)} text chunks..."):
+                embeddings = model.encode(chunks, show_progress_bar=False)
+            
+            logger.info(f"Successfully processed {len(chunks)} chunks")
+            return chunks, embeddings
+            
+        except Exception as e:
+            logger.error(f"Error in prepare_data: {e}")
+            st.error(f"Error processing document: {str(e)}")
+            return [], np.array([])
+    
+    def retrieve_relevant_chunks(self, query: str, top_k: int = config.TOP_K_SENTENCES) -> List[Tuple[str, float]]:
+        """Retrieve relevant chunks with similarity scores"""
+        try:
+            if self.model is None:
+                self.model = self.load_model()
+            
+            if self.model is None or len(self.chunks) == 0:
+                return []
+            
+            # Encode query
+            query_embedding = self.model.encode([query])
+            
+            # Calculate similarities
+            similarities = cosine_similarity(query_embedding, self.embeddings)[0]
+            
+            # Get top k chunks above threshold
+            top_indices = np.argsort(similarities)[-top_k:][::-1]
+            relevant_chunks = [
+                (self.chunks[i], similarities[i]) 
+                for i in top_indices 
+                if similarities[i] > config.SIMILARITY_THRESHOLD
+            ]
+            
+            # If no chunks meet threshold, return top 1
+            if not relevant_chunks and len(self.chunks) > 0:
+                best_idx = np.argmax(similarities)
+                relevant_chunks = [(self.chunks[best_idx], similarities[best_idx])]
+            
+            return relevant_chunks
+            
+        except Exception as e:
+            logger.error(f"Error in retrieve_relevant_chunks: {e}")
+            return []
+
+# Initialize components
+@st.cache_resource
+def get_openai_client():
+    try:
+        return OpenAI(api_key=st.secrets["OPENAI_API_KEY"]), True
+    except Exception as e:
+        logger.error(f"OpenAI API key error: {e}")
+        return None, False
+
+@st.cache_resource
+def initialize_rag_system():
+    return RAGSystem()
+
+def generate_response(client: OpenAI, query: str, context: str, conversation_context: str) -> str:
+    """Generate response with better prompt engineering"""
+    try:
+        system_message = f"""You are Kumarbot, a helpful HR assistant for our company. Your role is to answer employee questions based on our Employee Handbook.
+
+{conversation_context}
+
+CURRENT CONTEXT FROM HANDBOOK:
+{context}
+
+INSTRUCTIONS:
+- Answer based primarily on the handbook context provided
+- If the question references previous conversation ("that policy", "what about...", etc.), use conversation history
+- Be helpful, professional, and concise
+- If information is not in the context, say so politely and suggest contacting HR
+- Always maintain a friendly, supportive tone
+- Provide actionable information when possible"""
+
+        response = client.chat.completions.create(
+            model=config.OPENAI_MODEL,
+            messages=[
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": query}
+            ],
+            max_tokens=config.MAX_TOKENS,
+            temperature=config.TEMPERATURE
+        )
+        
+        return response.choices[0].message.content
+        
+    except Exception as e:
+        logger.error(f"Error generating response: {e}")
+        raise e
+
+def main():
+    # Get components
+    openai_client, api_key_available = get_openai_client()
+    rag_system = initialize_rag_system()
+    conv_manager = ConversationManager(config.MAX_MEMORY_SIZE)
+    conv_manager.initialize()
+    
+# Load your handbook content - REPLACE THIS WITH YOUR ACTUAL HANDBOOK TEXT
+YOUR_PARAGRAPH = """Esperanza conducts pre-employment background checks on all applicants who accept an offer of employment. All offers of employment or volunteering at Esperanza are contingent upon clear results of a thorough background check. Background checks will be conducted for or requested of individuals in the following circumstances:  Job candidates to whom offers of employment have been made  Employees who are being promoted into new positions, as deemed necessary by the individual requirements of the position  Current employees whose current criminal background checks have aged will be checked every three years. Employees will be notified by HR of their expiring clearances and given instructions and a deadline for completing them.  Child abuse and Criminal: Mental Health professionals, Clinicians, nurses, social workers, medical assistants, dietitians, and any other employee whose job involves regular and repeated contact with children.  Criminal only: All other employees  For job applicants, background checks will not be requested or conducted during the employment application process, but only after a conditional offer of employment has been made in compliance with Pennsylvania law.
 
 Pre-employment background checks will include:  Pennsylvania (PA) Criminal Background clearance  Child Abuse History check (when applicable to the position): PA Child Abuse clearance, and FBI Fingerprint-based clearance  Social Security Verification: validates the applicant's Social Security number, date of birth and former addresses.  Personal and Professional References: calls will be placed to individuals listed as references by the applicant.  Medicare/Medicaid Exclusion Checks: Checks for Medicare/Medicaid fraud history. 
 
@@ -241,188 +548,146 @@ Under the provisions of the Pennsylvania Unemployment Compensation Law, employee
 
 Esperanza is committed to an overall culture of safety. EHC seeks to create a safe and peaceful environment for all patients, visitors and staff. Definition of Weapon: A weapon is an object, instrument, substance, or device which is intended to be used in a way that is likely to injure, kill, incapacitate, damage or destroy. Weapons include, but are not limited to firearms/guns, sling shots, stun guns/tasers, martial arts weapons, blades/knives greater than 3”, explosive devices, fireworks and other dangerous implements. Policy At Esperanza Health Center the safety and well-being of our patients, staff, and visitors are of paramount importance. In order to provide a secure environment conducive to healing and care, we have implemented a strict weapon-free policy within our premises. This policy applies to all individuals entering our facility, including patients, visitors, employees, vendors and contractors. Exemptions: Law enforcement officers and authorized security personnel, while on official duty and in uniform, are exempt from this policy Notice: Clear signage indicating the weapon-free policy will be prominently displayed at all entrances. The weapons policy will be reviewed with all employees at onboarding. Patients will sign a culture of safety acknowledgement upon registration and yearly, thereafter, as part of their patient update packet. Consequences: Employees in violation of this policy may be subject to sanctions as per Esperanza’s disciplinary policy up to and including, termination of employment. Patients in violation of this policy may be dismissed from the practice. See: procedural and reporting considerations Legal Considerations: Esperanza Health Center acknowledges that individuals with valid licenses to carry concealed firearms may have certain rights under Pennsylvania law. However, the health center reserves the right to maintain a weapon-free environment for the safety and comfort of all individuals on its premises. Procedural and Reporting Considerations  Security guards are trained to observe persons entering EHC facilities for possession of a weapon. If a weapon is observed, or if there is probable cause to believe that the person may be carrying a weapon, security will pull the person to the side and inquire. If a weapon is discovered, the person will be directed to secure the weapon outside of the facility, prior to services being rendered. Communication with the person will be done discreetly, and with the intent to communicate Esperanza’s commitment to the safety and wellbeing of patients, staff, and visitors.  If a person is observed to have a weapon while in the course of being seen as a patient, or as a participant in an EHC activity, employees are asked to use judgment in how they proceed. If the employee has a relationship with the patient/client (or feels comfortable broaching the subject), they should remind the patient/client of the EHC policy prohibiting weapons on premise. If the employee does not feel secure in having this conversation, a supervisor, clinician, security or administrator should be sought to address the situation. Providers, Supervisors/Managers, and Administrators, by nature of their job responsibility, should be ready to address situations of this nature.  Once a patient/client is informed of the policy, the Office Manager or Director of Programs should be informed so that a letter is sent to the patient/client reminding them of the policy and that a subsequent infraction will lead to dismissal from Esperanza. An incident report must be written describing the weapon seen and the discussion with the patient/client, as well as indicating that the letter was sent.  Note: If in the discussion with the patient/client it is perceived that the patient/client is ambivalent toward or dismissive of the culture of safety philosophy of Esperanza and that adherence is not forthcoming, Esperanza may forego the warning letter and move to direct dismissal. Any individual who observes another person in possession of a weapon on our premises is strongly encouraged to report the incident to security personnel. This weapon-free policy will be strictly enforced by Esperanza Health Center’s security personnel and management. The cooperation of all individuals entering our facility is vital in ensuring a safe and healing environment for everyone. By adhering to this policy, we contribute to the security and well-being of our community.
 
-
-
 """
 
-# Set up the page
-st.set_page_config(page_title="Kumarbot", page_icon="🤖")
-st.title("🤖 Kumarbot")
-st.write("Ask me questions about the Employee Handbook!")
-
-# Get OpenAI API key from Streamlit secrets
-try:
-    openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-    api_key_available = True
-except Exception as e:
-    openai_client = None
-    api_key_available = False
-
-# Initialize the embedding model (this runs once)
-@st.cache_resource
-def load_model():
-    return SentenceTransformer('all-MiniLM-L6-v2')
-
-# Split paragraph into sentences and create embeddings
-@st.cache_data
-def prepare_data(paragraph):
-    # Split into sentences
-    sentences = re.split(r'[.!?]+', paragraph)
-    sentences = [s.strip() for s in sentences if s.strip()]
+def main():
+    # Get components
+    openai_client, api_key_available = get_openai_client()
+    rag_system = initialize_rag_system()
+    conv_manager = ConversationManager(config.MAX_MEMORY_SIZE)
+    conv_manager.initialize()
     
-    # Create embeddings
-    model = load_model()
-    embeddings = model.encode(sentences)
-    
-    return sentences, embeddings
-
-# NEW: Conversation memory functions
-def initialize_conversation_memory():
-    """Initialize conversation memory if it doesn't exist"""
-    if 'conversation_memory' not in st.session_state:
-        st.session_state.conversation_memory = []
-
-def add_to_memory(user_message: str, bot_response: str):
-    """Add exchange to memory, keeping only last 5"""
-    exchange = {
-        'user': user_message,
-        'bot': bot_response
-    }
-    
-    st.session_state.conversation_memory.append(exchange)
-    
-    # Keep only last 5 exchanges
-    if len(st.session_state.conversation_memory) > 5:
-        st.session_state.conversation_memory = st.session_state.conversation_memory[-5:]
-
-def get_conversation_context() -> str:
-    """Get formatted conversation history for prompt"""
-    if not st.session_state.conversation_memory:
-        return ""
-    
-    context_parts = ["Previous conversation:"]
-    for i, exchange in enumerate(st.session_state.conversation_memory):
-        context_parts.append(f"Q{i+1}: {exchange['user']}")
-        context_parts.append(f"A{i+1}: {exchange['bot']}")
-    
-    return "\n".join(context_parts)
-
-# Prepare the data
-sentences, embeddings = prepare_data(YOUR_PARAGRAPH)
-
-# Initialize conversation memory
-initialize_conversation_memory()
-
-# Chat interface
-if 'messages' not in st.session_state:
-    st.session_state.messages = []
-
-# Display chat history
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.write(message["content"])
-
-# Chat input
-if prompt := st.chat_input("Ask a question..."):
-    # Add user message to chat history
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.write(prompt)
-    
-    # Check if API key is available
-    if not api_key_available:
-        with st.chat_message("assistant"):
-            st.error("API key not configured. Please contact your administrator.")
+    # Prepare data
+    if YOUR_PARAGRAPH.strip() and "Your Employee Handbook content goes here" not in YOUR_PARAGRAPH:
+        rag_system.chunks, rag_system.embeddings = rag_system.prepare_data(YOUR_PARAGRAPH)
+        data_ready = len(rag_system.chunks) > 0
     else:
-        # Find relevant sentences
-        model = load_model()
-        question_embedding = model.encode([prompt])
-        
-        # Calculate similarity
-        similarities = cosine_similarity(question_embedding, embeddings)[0]
-        
-        # Get top 2 most similar sentences
-        top_indices = np.argsort(similarities)[-2:][::-1]
-        relevant_sentences = [sentences[i] for i in top_indices if similarities[i] > 0.1]
-        
-        if not relevant_sentences:
-            relevant_sentences = [sentences[0]]  # Fallback to first sentence
-        
-        # Create context
-        context = " ".join(relevant_sentences)
-
-        # NEW: Get conversation context
-        conversation_context = get_conversation_context()
-        
-       # Generate response using OpenAI
-        try:
-            with st.chat_message("assistant"):
-                with st.spinner("Thinking..."):
-                    # MODIFIED: Updated system message to include conversation context
-                    system_message = f"""You are a helpful HR assistant. Answer the user's question based on the employee handbook context provided.
-
-{conversation_context}
-
-Employee Handbook Context: {context}
-
-If the current question references something from our previous conversation (like "that policy", "what about...", "how does that work"), use the conversation history to understand what they're referring to. If the context doesn't contain enough information to answer the question, say so politely."""
-
-                    response = openai_client.chat.completions.create(
-                        model="gpt-3.5-turbo",
-                        messages=[
-                            {"role": "system", "content": system_message},
-                            {"role": "user", "content": prompt}
-                        ],
-                        max_tokens=150,
-                        temperature=0.7
-                    )
-                    
-                    answer = response.choices[0].message.content
-                    st.write(answer)
-                    
-                    # Add assistant response to chat history
-                    st.session_state.messages.append({"role": "assistant", "content": answer})
-                    
-                    # NEW: Add to conversation memory
-                    add_to_memory(prompt, answer)
-                    
-                    # Show which sentences were used (for debugging)
-                    with st.expander("🔍 Source sentences used"):
-                        for sentence in relevant_sentences:
-                            st.write(f"• {sentence}")
-        
-        except Exception as e:
-            with st.chat_message("assistant"):
-                st.error(f"Error: {str(e)}")
-                st.write("Please contact your administrator if this problem persists.")
-
-# Instructions
-with st.sidebar:
-    st.header("📝 How to Use")
-    st.write("""
-    Simply ask questions about the company information and get instant answers!
+        st.warning("⚠️ Please replace YOUR_PARAGRAPH with your actual Employee Handbook content.")
+        data_ready = False
     
-    💡 **New!** I now remember our conversation, so you can ask follow-up questions like:
-    - "Tell me more about that"
-    - "What about part-time employees?"
-    - "How does that apply to my role?"
-    """)
+    # Initialize chat history
+    if 'messages' not in st.session_state:
+        st.session_state.messages = []
     
-    st.header("💡 Example Questions")
-    st.write("""
-    - "What is our vacation policy?"
-    - "How do I request time off?"
-    - "What are the company benefits?"
-    - "Who do I contact for HR questions?"
-    """)
+    # Main chat interface
+    col1, col2 = st.columns([3, 1])
     
-    # NEW: Memory management
-    st.header("🧠 Conversation Memory")
-    if st.session_state.conversation_memory:
-        st.write(f"Remembering last {len(st.session_state.conversation_memory)} exchanges")
-        if st.button("Clear Memory"):
-            st.session_state.conversation_memory = []
-            st.success("Memory cleared!")
+    with col1:
+        # Display chat history
+        chat_container = st.container()
+        with chat_container:
+            for message in st.session_state.messages:
+                with st.chat_message(message["role"]):
+                    st.write(message["content"])
+        
+        # Chat input
+        if prompt := st.chat_input("Ask a question about the Employee Handbook..."):
+            # Add user message
+            st.session_state.messages.append({"role": "user", "content": prompt})
+            with st.chat_message("user"):
+                st.write(prompt)
+            
+            # Generate response
+            if not api_key_available:
+                with st.chat_message("assistant"):
+                    st.error("🔑 API key not configured. Please contact your administrator.")
+            elif not data_ready:
+                with st.chat_message("assistant"):
+                    st.error("📄 Handbook content not loaded. Please contact your administrator.")
+            else:
+                try:
+                    with st.chat_message("assistant"):
+                        with st.spinner("🤔 Searching handbook..."):
+                            # Retrieve relevant chunks
+                            relevant_chunks = rag_system.retrieve_relevant_chunks(prompt)
+                            
+                            if not relevant_chunks:
+                                st.warning("No relevant information found in the handbook.")
+                                answer = "I couldn't find specific information about that in our Employee Handbook. Please contact HR for assistance."
+                            else:
+                                # Prepare context
+                                context = "\n\n".join([chunk for chunk, _ in relevant_chunks])
+                                conversation_context = conv_manager.get_context()
+                                
+                                # Generate response
+                                answer = generate_response(openai_client, prompt, context, conversation_context)
+                        
+                        st.write(answer)
+                        
+                        # Add to chat history and memory
+                        st.session_state.messages.append({"role": "assistant", "content": answer})
+                        
+                        metadata = {
+                            'num_chunks_used': len(relevant_chunks),
+                            'similarity_scores': [score for _, score in relevant_chunks]
+                        }
+                        conv_manager.add_exchange(prompt, answer, metadata)
+                        
+                        # Show sources
+                        if relevant_chunks:
+                            with st.expander("🔍 Sources from Employee Handbook"):
+                                for i, (chunk, score) in enumerate(relevant_chunks, 1):
+                                    st.markdown(f"""
+                                    <div class="source-highlight">
+                                        <strong>Source {i}</strong> (Relevance: {score:.2f})<br>
+                                        {chunk[:200]}{'...' if len(chunk) > 200 else ''}
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                
+                except Exception as e:
+                    with st.chat_message("assistant"):
+                        st.error(f"❌ Error: {str(e)}")
+                        st.write("Please contact your administrator if this problem persists.")
+    
+    # Sidebar
+    with col2:
+        st.sidebar.header("📚 Kumarbot Help")
+        
+        st.sidebar.markdown("""
+        ### 💡 How to Use
+        Ask questions about company policies, benefits, procedures, or any topic covered in our Employee Handbook.
+        
+        ### 🔄 Follow-up Questions
+        I remember our conversation, so you can ask:
+        - "Tell me more about that"
+        - "What about contractors?"
+        - "How does that work?"
+        """)
+        
+        st.sidebar.header("📝 Example Questions")
+        examples = [
+            "What is our vacation policy?",
+            "How do I request time off?",
+            "What benefits do we offer?",
+            "What's the dress code?",
+            "Who handles payroll questions?"
+        ]
+        
+        for example in examples:
+            if st.sidebar.button(example, key=f"ex_{hash(example)}"):
+                st.session_state.messages.append({"role": "user", "content": example})
+                st.rerun()
+        
+        # Memory management
+        st.sidebar.header("🧠 Conversation")
+        if st.session_state.conversation_memory:
+            st.sidebar.success(f"Remembering {len(st.session_state.conversation_memory)} exchanges")
+        else:
+            st.sidebar.info("No conversation history yet")
+        
+        if st.sidebar.button("🗑️ Clear Chat & Memory"):
+            st.session_state.messages = []
+            conv_manager.clear_memory()
+            st.sidebar.success("Cleared!")
             st.rerun()
-    else:
-        st.write("No conversation history yet")
+        
+        # System status
+        st.sidebar.header("⚙️ System Status")
+        st.sidebar.write(f"🤖 Model: {config.MODEL_NAME}")
+        st.sidebar.write(f"🔑 API: {'✅ Connected' if api_key_available else '❌ Not configured'}")
+        if data_ready:
+            st.sidebar.write(f"📄 Chunks: {len(rag_system.chunks)}")
+        st.sidebar.write(f"💾 Memory: {len(st.session_state.conversation_memory)}/{config.MAX_MEMORY_SIZE}")
+
+if __name__ == "__main__":
+    main()

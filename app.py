@@ -714,3 +714,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+    if st.sidebar.button(example, key=f"ex_{hash(example)}"):
+    st.session_state.pending_question = example
+    st.sidebar.success("Question queued!")
+    st.rerun()

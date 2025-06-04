@@ -572,17 +572,30 @@ def main():
     # Main chat interface
     col1, col2 = st.columns([3, 1])
     
-    with col1:
-        # Create a container for chat messages with fixed height
-        chat_container = st.container()
-        
+    with col1:    
         # Display chat history
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
                 st.write(message["content"])
+
+    # Check for pending question from example buttons BEFORE chat input
+    if hasattr(st.session_state, 'pending_question') and st.session_state.pending_question:
+        prompt = st.session_state.pending_question
+        st.session_state.pending_question = None  # Clear the pending question
+        process_user_input = True
+    else:
+        process_user_input = False
+        prompt = None
     
-    # Chat input (outside the column structure to stay at bottom)
-    if prompt := st.chat_input("Ask a question about the Employee Handbook..."):
+    # Chat input (MUST be outside columns and at this position to stay at bottom)
+    if not process_user_input:  # Only show input if not already processing
+        user_input = st.chat_input("Ask a question about the Employee Handbook...")
+        if user_input:
+            prompt = user_input
+            process_user_input = True
+
+        # Process user input (from chat input or example button)
+    if process_user_input:
         # Add user message
         st.session_state.messages.append({"role": "user", "content": prompt})
         

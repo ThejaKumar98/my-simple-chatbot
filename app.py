@@ -326,7 +326,8 @@ INSTRUCTIONS:
         raise e
 
 # Load your handbook content - REPLACE THIS WITH YOUR ACTUAL HANDBOOK TEXT
-YOUR_PARAGRAPH = """Esperanza conducts pre-employment background checks on all applicants who accept an offer of employment. All offers of employment or volunteering at Esperanza are contingent upon clear results of a thorough background check. Background checks will be conducted for or requested of individuals in the following circumstances:  Job candidates to whom offers of employment have been made  Employees who are being promoted into new positions, as deemed necessary by the individual requirements of the position  Current employees whose current criminal background checks have aged will be checked every three years. Employees will be notified by HR of their expiring clearances and given instructions and a deadline for completing them.  Child abuse and Criminal: Mental Health professionals, Clinicians, nurses, social workers, medical assistants, dietitians, and any other employee whose job involves regular and repeated contact with children.  Criminal only: All other employees  For job applicants, background checks will not be requested or conducted during the employment application process, but only after a conditional offer of employment has been made in compliance with Pennsylvania law.
+YOUR_PARAGRAPH = """
+Esperanza conducts pre-employment background checks on all applicants who accept an offer of employment. All offers of employment or volunteering at Esperanza are contingent upon clear results of a thorough background check. Background checks will be conducted for or requested of individuals in the following circumstances:  Job candidates to whom offers of employment have been made  Employees who are being promoted into new positions, as deemed necessary by the individual requirements of the position  Current employees whose current criminal background checks have aged will be checked every three years. Employees will be notified by HR of their expiring clearances and given instructions and a deadline for completing them.  Child abuse and Criminal: Mental Health professionals, Clinicians, nurses, social workers, medical assistants, dietitians, and any other employee whose job involves regular and repeated contact with children.  Criminal only: All other employees  For job applicants, background checks will not be requested or conducted during the employment application process, but only after a conditional offer of employment has been made in compliance with Pennsylvania law.
 
 Pre-employment background checks will include:  Pennsylvania (PA) Criminal Background clearance  Child Abuse History check (when applicable to the position): PA Child Abuse clearance, and FBI Fingerprint-based clearance  Social Security Verification: validates the applicant's Social Security number, date of birth and former addresses.  Personal and Professional References: calls will be placed to individuals listed as references by the applicant.  Medicare/Medicaid Exclusion Checks: Checks for Medicare/Medicaid fraud history. 
 
@@ -584,17 +585,17 @@ def main():
     # Main chat interface
     col1, col2 = st.columns([3, 1])
     
-    with col1:    # Level 1 indentation (4 spaces)
-    # Create a container for chat messages with fixed height
-        chat_container = st.container()  # Level 2 indentation (8 spaces)
-        with chat_container:  # Level 2 indentation (8 spaces)
-        # Display chat history
-            for message in st.session_state.messages:  # Level 3 indentation (12 spaces)
-                with st.chat_message(message["role"]):  # Level 4 indentation (16 spaces)
-                    st.write(message["content"])  # Level 5 indentation (20 spaces)
-
+    with col1:    
+        # Create a container for chat messages with fixed height
+        chat_container = st.container()
+        with chat_container:
+            # Display chat history
+            for message in st.session_state.messages:
+                with st.chat_message(message["role"]):
+                    st.write(message["content"])
+    
     # Chat input outside of columns - will be positioned at bottom via CSS
-    user_input = st.chat_input("Ask a question about the Employee Handbook...")  # Level 1 indentation (4 spaces)
+    user_input = st.chat_input("Ask a question about the Employee Handbook...")
     
     # Determine what to process
     prompt = None
@@ -727,3 +728,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+

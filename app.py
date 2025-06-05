@@ -63,12 +63,16 @@ st.markdown("""
     .stChatInput {
         position: fixed !important;
         bottom: 0 !important;
-        left: 0 !important;
-        right: 0 !important;
+        left: 25% !important;
+        right: 25% !important;
         z-index: 999 !important;
         background: white !important;
         padding: 10px !important;
         border-top: 1px solid #e0e0e0 !important;
+        margin-left: 2rem !important;
+        margin-right: 2rem !important;
+        border-radius: 8px 8px 0 0 !important;
+        box-shadow: 0 -2px 10px rgba(0,0,0,0.1) !important;
     }
     .main .block-container {
         padding-bottom: 100px !important;
@@ -728,6 +732,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
 

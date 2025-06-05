@@ -584,17 +584,17 @@ def main():
     # Main chat interface
     col1, col2 = st.columns([3, 1])
     
-    with col1:    
-        # Create a container for chat messages with fixed height
-        chat_container = st.container()
-        with chat_container:
+    with col1:    # Level 1 indentation (4 spaces)
+    # Create a container for chat messages with fixed height
+    chat_container = st.container()  # Level 2 indentation (8 spaces)
+    with chat_container:  # Level 2 indentation (8 spaces)
         # Display chat history
-        for message in st.session_state.messages:
-            with st.chat_message(message["role"]):
-                st.write(message["content"])
+        for message in st.session_state.messages:  # Level 3 indentation (12 spaces)
+            with st.chat_message(message["role"]):  # Level 4 indentation (16 spaces)
+                st.write(message["content"])  # Level 5 indentation (20 spaces)
 
-        # Chat input (always show this)
-        user_input = st.chat_input("Ask a question about the Employee Handbook...")
+    # Chat input outside of columns - will be positioned at bottom via CSS
+    user_input = st.chat_input("Ask a question about the Employee Handbook...")  # Level 1 indentation (4 spaces)
     
     # Determine what to process
     prompt = None

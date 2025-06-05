@@ -306,13 +306,6 @@ INSTRUCTIONS:
         logger.error(f"Error generating response: {e}")
         raise e
 
-def main():
-    # Get components
-    openai_client, api_key_available = get_openai_client()
-    rag_system = initialize_rag_system()
-    conv_manager = ConversationManager(config.MAX_MEMORY_SIZE)
-    conv_manager.initialize()
-    
 # Load your handbook content - REPLACE THIS WITH YOUR ACTUAL HANDBOOK TEXT
 YOUR_PARAGRAPH = """Esperanza conducts pre-employment background checks on all applicants who accept an offer of employment. All offers of employment or volunteering at Esperanza are contingent upon clear results of a thorough background check. Background checks will be conducted for or requested of individuals in the following circumstances:  Job candidates to whom offers of employment have been made  Employees who are being promoted into new positions, as deemed necessary by the individual requirements of the position  Current employees whose current criminal background checks have aged will be checked every three years. Employees will be notified by HR of their expiring clearances and given instructions and a deadline for completing them.  Child abuse and Criminal: Mental Health professionals, Clinicians, nurses, social workers, medical assistants, dietitians, and any other employee whose job involves regular and repeated contact with children.  Criminal only: All other employees  For job applicants, background checks will not be requested or conducted during the employment application process, but only after a conditional offer of employment has been made in compliance with Pennsylvania law.
 
@@ -550,8 +543,6 @@ Esperanza is committed to an overall culture of safety. EHC seeks to create a sa
 
 """
 
-# Replace the input processing section in your main() function with this:
-
 def main():
     # Get components
     openai_client, api_key_available = get_openai_client()
@@ -580,8 +571,8 @@ def main():
             with st.chat_message(message["role"]):
                 st.write(message["content"])
 
-    # Chat input (always show this)
-    user_input = st.chat_input("Ask a question about the Employee Handbook...")
+        # Chat input (always show this)
+        user_input = st.chat_input("Ask a question about the Employee Handbook...")
     
     # Determine what to process
     prompt = None
@@ -714,7 +705,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    if st.sidebar.button(example, key=f"ex_{hash(example)}"):
-    st.session_state.pending_question = example
-    st.sidebar.success("Question queued!")
-    st.rerun()

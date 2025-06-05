@@ -54,6 +54,25 @@ st.markdown("""
         padding: 0.5rem;
         margin: 0.5rem 0;
     }
+    .chat-container {
+        height: 70vh;
+        overflow-y: auto;
+        padding: 1rem;
+        margin-bottom: 100px;
+    }
+    .stChatInput {
+        position: fixed !important;
+        bottom: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        z-index: 999 !important;
+        background: white !important;
+        padding: 10px !important;
+        border-top: 1px solid #e0e0e0 !important;
+    }
+    .main .block-container {
+        padding-bottom: 100px !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 

@@ -585,6 +585,9 @@ def main():
     col1, col2 = st.columns([3, 1])
     
     with col1:    
+        # Create a container for chat messages with fixed height
+        chat_container = st.container()
+        with chat_container:
         # Display chat history
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):

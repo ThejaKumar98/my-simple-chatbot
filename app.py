@@ -14,14 +14,15 @@ from pathlib import Path
 @dataclass
 class Config:
     MODEL_NAME: str = 'all-MiniLM-L6-v2'
-    OPENAI_MODEL: str = "gpt-3.5-turbo"
-    MAX_TOKENS: int = 300
-    TEMPERATURE: float = 0.7
-    SIMILARITY_THRESHOLD: float = 0.2
-    TOP_K_SENTENCES: int = 3
-    MAX_MEMORY_SIZE: int = 8
-    CHUNK_SIZE: int = 200  # words per chunk
-    CHUNK_OVERLAP: int = 50  # words overlap
+    OPENAI_MODEL: str = "gpt-4o-mini"  # Faster and cheaper than gpt-3.5-turbo
+    MAX_TOKENS: int = 500  # Increased for better responses
+    TEMPERATURE: float = 0.3  # Lower for more consistent responses
+    SIMILARITY_THRESHOLD: float = 0.15  # Slightly lower for better recall
+    TOP_K_SENTENCES: int = 5  # More context for better answers
+    MAX_MEMORY_SIZE: int = 6  # Reduced to save memory
+    CHUNK_SIZE: int = 150  # Smaller chunks for better precision
+    CHUNK_OVERLAP: int = 30  # Reduced overlap
+    EMBEDDING_BATCH_SIZE: int = 32  # Process embeddings in batches
 
 config = Config()
 
@@ -63,8 +64,8 @@ st.markdown("""
     .stChatInput {
         position: fixed !important;
         bottom: 0 !important;
-        left: 15% !important;
-        right: 15% !important;
+        left: 25% !important;
+        right: 25% !important;
         z-index: 999 !important;
         background: white !important;
         padding: 10px !important;
@@ -219,7 +220,7 @@ class RAGSystem:
             st.error("Failed to load embedding model. Please try refreshing the page.")
             return None
     
-    @st.cache_data
+    @st.cache_data(ttl=3600)  # Cache for 1 hour
     def prepare_data(_self, text: str) -> Tuple[List[str], np.ndarray]:
         """Process text and create embeddings with better error handling"""
         try:
@@ -236,10 +237,15 @@ class RAGSystem:
             if model is None:
                 return [], np.array([])
             
-            # Create embeddings with progress bar
+            # Create embeddings in batches for better memory management
+            embeddings = []
             with st.spinner(f"Processing {len(chunks)} text chunks..."):
-                embeddings = model.encode(chunks, show_progress_bar=False)
+                for i in range(0, len(chunks), config.EMBEDDING_BATCH_SIZE):
+                    batch = chunks[i:i + config.EMBEDDING_BATCH_SIZE]
+                    batch_embeddings = model.encode(batch, show_progress_bar=False)
+                    embeddings.extend(batch_embeddings)
             
+            embeddings = np.array(embeddings)
             logger.info(f"Successfully processed {len(chunks)} chunks")
             return chunks, embeddings
             
@@ -298,20 +304,24 @@ def initialize_rag_system():
 def generate_response(client: OpenAI, query: str, context: str, conversation_context: str) -> str:
     """Generate response with better prompt engineering"""
     try:
-        system_message = f"""You are Kumarbot, a helpful HR assistant for our company. Your role is to answer employee questions based on our Employee Handbook.
+        # Truncate context if too long to avoid token limits
+        max_context_length = 3000
+        if len(context) > max_context_length:
+            context = context[:max_context_length] + "...[truncated]"
+        
+        system_message = f"""You are Kumarbot, a helpful HR assistant. Answer employee questions using the Employee Handbook context provided.
 
 {conversation_context}
 
-CURRENT CONTEXT FROM HANDBOOK:
+HANDBOOK CONTEXT:
 {context}
 
-INSTRUCTIONS:
-- Answer based primarily on the handbook context provided
-- If the question references previous conversation ("that policy", "what about...", etc.), use conversation history
-- Be helpful, professional, and concise
-- If information is not in the context, say so politely and suggest contacting HR
-- Always maintain a friendly, supportive tone
-- Provide actionable information when possible"""
+GUIDELINES:
+- Answer directly and concisely based on the handbook context
+- If referencing previous conversation, use the conversation history
+- If information isn't in the context, say "I don't see that information in our handbook" and suggest contacting HR
+- Be professional but friendly
+- Provide specific, actionable information when available"""
 
         response = client.chat.completions.create(
             model=config.OPENAI_MODEL,
@@ -320,14 +330,15 @@ INSTRUCTIONS:
                 {"role": "user", "content": query}
             ],
             max_tokens=config.MAX_TOKENS,
-            temperature=config.TEMPERATURE
+            temperature=config.TEMPERATURE,
+            timeout=30  # Add timeout to prevent hanging
         )
         
         return response.choices[0].message.content
         
     except Exception as e:
         logger.error(f"Error generating response: {e}")
-        raise e
+        return "I'm having trouble generating a response right now. Please try again or contact HR for assistance."
 
 # Load your handbook content - REPLACE THIS WITH YOUR ACTUAL HANDBOOK TEXT
 YOUR_PARAGRAPH = """
@@ -566,7 +577,6 @@ Under the provisions of the Pennsylvania Unemployment Compensation Law, employee
 Esperanza is committed to an overall culture of safety. EHC seeks to create a safe and peaceful environment for all patients, visitors and staff. Definition of Weapon: A weapon is an object, instrument, substance, or device which is intended to be used in a way that is likely to injure, kill, incapacitate, damage or destroy. Weapons include, but are not limited to firearms/guns, sling shots, stun guns/tasers, martial arts weapons, blades/knives greater than 3”, explosive devices, fireworks and other dangerous implements. Policy At Esperanza Health Center the safety and well-being of our patients, staff, and visitors are of paramount importance. In order to provide a secure environment conducive to healing and care, we have implemented a strict weapon-free policy within our premises. This policy applies to all individuals entering our facility, including patients, visitors, employees, vendors and contractors. Exemptions: Law enforcement officers and authorized security personnel, while on official duty and in uniform, are exempt from this policy Notice: Clear signage indicating the weapon-free policy will be prominently displayed at all entrances. The weapons policy will be reviewed with all employees at onboarding. Patients will sign a culture of safety acknowledgement upon registration and yearly, thereafter, as part of their patient update packet. Consequences: Employees in violation of this policy may be subject to sanctions as per Esperanza’s disciplinary policy up to and including, termination of employment. Patients in violation of this policy may be dismissed from the practice. See: procedural and reporting considerations Legal Considerations: Esperanza Health Center acknowledges that individuals with valid licenses to carry concealed firearms may have certain rights under Pennsylvania law. However, the health center reserves the right to maintain a weapon-free environment for the safety and comfort of all individuals on its premises. Procedural and Reporting Considerations  Security guards are trained to observe persons entering EHC facilities for possession of a weapon. If a weapon is observed, or if there is probable cause to believe that the person may be carrying a weapon, security will pull the person to the side and inquire. If a weapon is discovered, the person will be directed to secure the weapon outside of the facility, prior to services being rendered. Communication with the person will be done discreetly, and with the intent to communicate Esperanza’s commitment to the safety and wellbeing of patients, staff, and visitors.  If a person is observed to have a weapon while in the course of being seen as a patient, or as a participant in an EHC activity, employees are asked to use judgment in how they proceed. If the employee has a relationship with the patient/client (or feels comfortable broaching the subject), they should remind the patient/client of the EHC policy prohibiting weapons on premise. If the employee does not feel secure in having this conversation, a supervisor, clinician, security or administrator should be sought to address the situation. Providers, Supervisors/Managers, and Administrators, by nature of their job responsibility, should be ready to address situations of this nature.  Once a patient/client is informed of the policy, the Office Manager or Director of Programs should be informed so that a letter is sent to the patient/client reminding them of the policy and that a subsequent infraction will lead to dismissal from Esperanza. An incident report must be written describing the weapon seen and the discussion with the patient/client, as well as indicating that the letter was sent.  Note: If in the discussion with the patient/client it is perceived that the patient/client is ambivalent toward or dismissive of the culture of safety philosophy of Esperanza and that adherence is not forthcoming, Esperanza may forego the warning letter and move to direct dismissal. Any individual who observes another person in possession of a weapon on our premises is strongly encouraged to report the incident to security personnel. This weapon-free policy will be strictly enforced by Esperanza Health Center’s security personnel and management. The cooperation of all individuals entering our facility is vital in ensuring a safe and healing environment for everyone. By adhering to this policy, we contribute to the security and well-being of our community.
 
 """
-
 def main():
     # Get components
     openai_client, api_key_available = get_openai_client()
@@ -629,18 +639,20 @@ def main():
             st.session_state.messages.append({"role": "assistant", "content": error_msg})
         else:
             try:
-                # Retrieve relevant chunks
-                relevant_chunks = rag_system.retrieve_relevant_chunks(prompt)
-                
-                if not relevant_chunks:
-                    answer = "I couldn't find specific information about that in our Employee Handbook. Please contact HR for assistance."
-                else:
-                    # Prepare context
-                    context = "\n\n".join([chunk for chunk, _ in relevant_chunks])
-                    conversation_context = conv_manager.get_context()
+                # Show a spinner while processing
+                with st.spinner("🤔 Thinking..."):
+                    # Retrieve relevant chunks
+                    relevant_chunks = rag_system.retrieve_relevant_chunks(prompt)
                     
-                    # Generate response
-                    answer = generate_response(openai_client, prompt, context, conversation_context)
+                    if not relevant_chunks:
+                        answer = "I couldn't find specific information about that in our Employee Handbook. Please contact HR for assistance."
+                    else:
+                        # Prepare context
+                        context = "\n\n".join([chunk for chunk, _ in relevant_chunks])
+                        conversation_context = conv_manager.get_context()
+                        
+                        # Generate response
+                        answer = generate_response(openai_client, prompt, context, conversation_context)
                 
                 # Add to chat history and memory
                 st.session_state.messages.append({"role": "assistant", "content": answer})
@@ -732,4 +744,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
+    

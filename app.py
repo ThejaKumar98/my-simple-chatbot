@@ -626,7 +626,7 @@ def main():
         process_user_input = True
 
     # Process user input (from either source) Replace
-    if process_user_input and prompt:
+if process_user_input and prompt:
     # Add user message
     st.session_state.messages.append({"role": "user", "content": prompt})
     

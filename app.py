@@ -625,22 +625,28 @@ def main():
         prompt = user_input
         process_user_input = True
 
-    # Process user input (from either source)
+    # Process user input (from either source) Replace
     if process_user_input and prompt:
-        # Add user message
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        
-        # Generate response
-        if not api_key_available:
-            error_msg = "🔑 API key not configured. Please contact your administrator."
-            st.session_state.messages.append({"role": "assistant", "content": error_msg})
-        elif not data_ready:
-            error_msg = "📄 Handbook content not loaded. Please contact your administrator."
-            st.session_state.messages.append({"role": "assistant", "content": error_msg})
-        else:
-            try:
-                # Show a spinner while processing
+    # Add user message
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    
+    # Generate response
+    if not api_key_available:
+        error_msg = "🔑 API key not configured. Please contact your administrator."
+        st.session_state.messages.append({"role": "assistant", "content": error_msg})
+    elif not data_ready:
+        error_msg = "📄 Handbook content not loaded. Please contact your administrator."
+        st.session_state.messages.append({"role": "assistant", "content": error_msg})
+    else:
+        try:
+            # Create a placeholder for the spinner
+            spinner_placeholder = st.empty()
+            
+            with spinner_placeholder:
                 with st.spinner("🤔 Thinking..."):
+                    # Add a small delay to ensure spinner shows
+                    time.sleep(0.5)
+                    
                     # Retrieve relevant chunks
                     relevant_chunks = rag_system.retrieve_relevant_chunks(prompt)
                     
@@ -653,29 +659,111 @@ def main():
                         
                         # Generate response
                         answer = generate_response(openai_client, prompt, context, conversation_context)
-                
-                # Add to chat history and memory
-                st.session_state.messages.append({"role": "assistant", "content": answer})
-                
-                metadata = {
-                    'num_chunks_used': len(relevant_chunks) if relevant_chunks else 0,
-                    'similarity_scores': [score for _, score in relevant_chunks] if relevant_chunks else []
-                }
-                conv_manager.add_exchange(prompt, answer, metadata)
-                
-                # Store sources for display
-                if relevant_chunks:
-                    st.session_state.last_sources = relevant_chunks
-                else:
-                    st.session_state.last_sources = []
             
-            except Exception as e:
-                error_msg = f"❌ Error: {str(e)}"
-                st.session_state.messages.append({"role": "assistant", "content": error_msg})
-                logger.error(f"Chat error: {e}")
+            # Clear the spinner placeholder
+            spinner_placeholder.empty()
+            
+            # Add to chat history and memory
+            st.session_state.messages.append({"role": "assistant", "content": answer})
+            
+            metadata = {
+                'num_chunks_used': len(relevant_chunks) if relevant_chunks else 0,
+                'similarity_scores': [score for _, score in relevant_chunks] if relevant_chunks else []
+            }
+            conv_manager.add_exchange(prompt, answer, metadata)
+            
+            # Store sources for display
+            if relevant_chunks:
+                st.session_state.last_sources = relevant_chunks
+            else:
+                st.session_state.last_sources = []
         
-        # Rerun to update the display
-        st.rerun()
+        except Exception as e:
+            error_msg = f"❌ Error: {str(e)}"
+            st.session_state.messages.append({"role": "assistant", "content": error_msg})
+            logger.error(f"Chat error: {e}")
+    
+    # Rerun to update the display
+    st.rerun()
+
+# Solution 2: Alternative approach using status container
+# Replace the processing section with this instead:
+
+if process_user_input and prompt:
+    # Add user message immediately
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    
+    # Rerun to show user message first
+    st.rerun()
+
+# Then add this separate handler after the main processing:
+if hasattr(st.session_state, 'processing_query'):
+    query_to_process = st.session_state.processing_query
+    del st.session_state.processing_query
+    
+    # Generate response with spinner
+    if not api_key_available:
+        error_msg = "🔑 API key not configured. Please contact your administrator."
+        st.session_state.messages.append({"role": "assistant", "content": error_msg})
+    elif not data_ready:
+        error_msg = "📄 Handbook content not loaded. Please contact your administrator."
+        st.session_state.messages.append({"role": "assistant", "content": error_msg})
+    else:
+        status_container = st.status("🤔 Processing your question...", expanded=True)
+        try:
+            with status_container:
+                st.write("🔍 Searching Employee Handbook...")
+                relevant_chunks = rag_system.retrieve_relevant_chunks(query_to_process)
+                
+                if not relevant_chunks:
+                    st.write("❌ No relevant information found")
+                    answer = "I couldn't find specific information about that in our Employee Handbook. Please contact HR for assistance."
+                else:
+                    st.write(f"✅ Found {len(relevant_chunks)} relevant sections")
+                    st.write("🤖 Generating response...")
+                    
+                    # Prepare context
+                    context = "\n\n".join([chunk for chunk, _ in relevant_chunks])
+                    conversation_context = conv_manager.get_context()
+                    
+                    # Generate response
+                    answer = generate_response(openai_client, query_to_process, context, conversation_context)
+                    st.write("✅ Response generated!")
+            
+            # Mark as complete
+            status_container.update(label="✅ Complete!", state="complete")
+            
+            # Add to chat history and memory
+            st.session_state.messages.append({"role": "assistant", "content": answer})
+            
+            metadata = {
+                'num_chunks_used': len(relevant_chunks) if relevant_chunks else 0,
+                'similarity_scores': [score for _, score in relevant_chunks] if relevant_chunks else []
+            }
+            conv_manager.add_exchange(query_to_process, answer, metadata)
+            
+            # Store sources for display
+            if relevant_chunks:
+                st.session_state.last_sources = relevant_chunks
+            else:
+                st.session_state.last_sources = []
+        
+        except Exception as e:
+            status_container.update(label="❌ Error occurred", state="error")
+            error_msg = f"❌ Error: {str(e)}"
+            st.session_state.messages.append({"role": "assistant", "content": error_msg})
+            logger.error(f"Chat error: {e}")
+    
+    # Rerun to show final result
+    st.rerun()
+
+# And modify the initial input processing to set the processing flag:
+if process_user_input and prompt:
+    # Add user message
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    # Set processing flag instead of processing immediately
+    st.session_state.processing_query = prompt
+    st.rerun()
     
     # Show sources for the last response (if any)
     if hasattr(st.session_state, 'last_sources') and st.session_state.last_sources:
